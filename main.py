@@ -696,6 +696,7 @@ async def on_message(message: discord.Message):
             current_tokens = None
             total_tokens = None
             token_info_str = ""
+            allowed_mentions = discord.AllowedMentions(users=True)
 
             try:
                 if hasattr(response, 'usage_metadata'):
