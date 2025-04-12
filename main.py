@@ -252,7 +252,7 @@ async def on_command_error(ctx: commands.Context, error):
 async def on_ready():
     print(f'Bot conectado como {bot.user}')
     default_prefix = DEFAULT_GUILD_CONFIG['command_prefix']
-    await bot.change_presence(activity=discord.Game(name=f"Mencióname | Prefijo: {default_prefix}"))
+    await bot.change_presence(activity=discord.Game(name=f"Mencióname + tu mensaje para interactuar!"))
     print(f"Bot listo. Prefijo por defecto: {default_prefix}.")
 
 @bot.command(name='setprefix')
