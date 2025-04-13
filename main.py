@@ -153,7 +153,22 @@ class ChannelContext:
         safety_settings = [ {"category": c, "threshold": HarmBlockThreshold.BLOCK_NONE} for c in HarmCategory if c != HarmCategory.HARM_CATEGORY_UNSPECIFIED]
         try:
             instruccion_personalidad = self.settings.get('personalidad', '').strip()
-            system_instruction = f"Responde en español (latinoamericano venezolano). {instruccion_personalidad}" if instruccion_personalidad else "Responde en español (latinoamericano)."
+            base_instruction = "Responde en español (latinoamericano venezolano)."
+
+            mention_instruction = (
+                "Importante: Los mensajes de los usuarios vendrán prefijados con su nombre e ID, por ejemplo 'UsuarioEjemplo (ID: 123456789): hola bot'. "
+                "Cuando necesites referirte al usuario que envió el mensaje original en tu respuesta (por ejemplo, si te piden saludar a otro usuario), "
+                "DEBES usar el formato de mención de Discord: `<@USER_ID>`, reemplazando USER_ID con el ID numérico proporcionado en el prefijo de su mensaje. "
+                "Ejemplo: Si 'UsuarioA (ID: 111)' te pide saludar a @UsuarioB, responde algo como 'Claro <@111>, le enviaré saludos a @UsuarioB.' o 'Hola @UsuarioB, <@111> te manda saludos.' "
+                "NO uses solo el nombre del usuario para mencionarlo, USA SIEMPRE `<@USER_ID>` para crear una mención funcional en Discord."
+            )
+
+            system_instruction_parts = [base_instruction]
+            if instruccion_personalidad:
+                system_instruction_parts.append(instruccion_personalidad)
+            system_instruction_parts.append(mention_instruction)
+
+            system_instruction = " ".join(system_instruction_parts)
 
             return genai.GenerativeModel(
                 model_name,
@@ -587,7 +602,15 @@ async def on_message(message: discord.Message):
 
     ctx_gemini.stop_requested = False
     original_user_text = user_text_content
+    author_name = message.author.display_name
     final_content_for_history = user_text_content
+
+    author_id = message.author.id
+
+    text_for_llm = original_user_text
+    if original_user_text.strip():
+        text_for_llm = f"{author_name} (ID: {author_id}): {original_user_text}"
+
     processed_attachment_info = []
     attachments_to_process = []
 
@@ -606,8 +629,9 @@ async def on_message(message: discord.Message):
                     await message.channel.send(f"ℹ️ Archivo '{attachment.filename}' ignorado (tipo no soportado: {attachment.content_type}).")
 
     parts = []
-    if final_content_for_history.strip():
-        parts.append({'text': final_content_for_history})
+
+    if text_for_llm.strip(): 
+        parts.append({'text': text_for_llm})
 
     if attachments_to_process:
         async with message.channel.typing():
@@ -616,12 +640,11 @@ async def on_message(message: discord.Message):
                     file_bytes = await attachment.read()
                     if attachment.content_type.startswith('image/'):
                          parts.append({'inline_data': {'mime_type': attachment.content_type, 'data': file_bytes}})
-                         processed_attachment_info.append(f"{attachment.filename} (imagen)")
+                         processed_attachment_info.append(f"{attachment.filename} (imagen de {author_name})")
                     elif attachment.content_type.startswith('text/') or attachment.filename.lower().endswith(tuple(LANGUAGE_EXTENSIONS.values())):
                          file_content = file_bytes.decode('utf-8', errors='replace')
-                         lang = next((name for name, ext in LANGUAGE_EXTENSIONS.items() if attachment.filename.lower().endswith(ext)), "")
-                         parts.append({'text': f"\n\n--- Contenido de {attachment.filename} ---\n{file_content}"})
-                         processed_attachment_info.append(f"{attachment.filename} (texto/código)")
+                         parts.append({'text': f"\n\n--- Contenido de {attachment.filename} (adjuntado por {author_name} ID: {author_id}) ---\n{file_content}"})
+                         processed_attachment_info.append(f"{attachment.filename} (texto/código de {author_name})") 
 
                 except Exception as e:
                     print(f"Error procesando adjunto {attachment.filename}: {e}")
@@ -630,6 +653,7 @@ async def on_message(message: discord.Message):
     if not parts:
         if message.attachments and not processed_attachment_info:
              await message.channel.send("ℹ️ No se procesó ningún adjunto válido y no había texto.")
+        print(f"Advertencia: No se encontraron partes válidas para procesar en el mensaje {message.id}. No se llamará a la IA.")
         return
 
     user_message_part = {'role': 'user', 'parts': parts}
