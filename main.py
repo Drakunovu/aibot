@@ -156,12 +156,21 @@ class ChannelContext:
             base_instruction = "Responde en español (latinoamericano venezolano)."
 
             mention_instruction = (
-                "Importante: Los mensajes de los usuarios vendrán prefijados con su nombre e ID, por ejemplo 'UsuarioEjemplo (ID: 123456789): hola bot'. "
-                "Cuando necesites referirte al usuario que envió el mensaje original en tu respuesta (por ejemplo, si te piden saludar a otro usuario), "
-                "DEBES usar el formato de mención de Discord: `<@USER_ID>`, reemplazando USER_ID con el ID numérico proporcionado en el prefijo de su mensaje. "
-                "Ejemplo: Si 'UsuarioA (ID: 111)' te pide saludar a @UsuarioB, responde algo como 'Claro <@111>, le enviaré saludos a @UsuarioB.' o 'Hola @UsuarioB, <@111> te manda saludos.' "
-                "NO uses solo el nombre del usuario para mencionarlo, USA SIEMPRE `<@USER_ID>` para crear una mención funcional en Discord."
-            )
+                "Importante: Estás en un chat de Discord con múltiples usuarios. "
+                "Cada mensaje de un usuario en el historial que te proporciono vendrá prefijado con su nombre y su ID único de Discord, en el formato: 'NombreUsuario (ID: 123456789012345678): contenido del mensaje'. "
+                "Es crucial que prestes atención a quién (qué ID) dijo cada cosa en el historial para mantener el contexto correcto de la conversación. "
+                "Cuando necesites referirte a un usuario específico en tu respuesta, DEBES usar el formato de mención de Discord: `<@USER_ID>`, reemplazando USER_ID con el ID numérico correspondiente que viste en el prefijo de su mensaje en el historial. "
+                "Ejemplo de Interacción Correcta: "
+                "Historial:"
+                "UsuarioA (ID: 111): @Bot saluda a @UsuarioB"
+                "Tu Respuesta Correcta: '¡Claro <@111>! Hola @UsuarioB, te envío saludos de parte de <@111>.' (Nota cómo mencionas a UsuarioA usando su ID 111)."
+                "Otro Ejemplo:"
+                "Historial:"
+                "UsuarioX (ID: 888): ¿Qué opinas de la idea de UsuarioY?"
+                "UsuarioY (ID: 999): Creo que es buena idea."
+                "UsuarioX (ID: 888): @Bot, ¿qué dijo UsuarioY?"
+                "Tu Respuesta Correcta: '<@888>, <@999> dijo que cree que es buena idea.'"
+                "NUNCA te refieras al usuario que te pide algo usando tu propio nombre ('Bot'). SIEMPRE usa su mención `<@USER_ID>` obtenida del historial."            )
 
             system_instruction_parts = [base_instruction]
             if instruccion_personalidad:
@@ -173,7 +182,7 @@ class ChannelContext:
             return genai.GenerativeModel(
                 model_name,
                 system_instruction=system_instruction,
-                generation_config={'temperature': self.settings['temperatura'], 'max_output_tokens': 5000},
+                generation_config={'temperature': self.settings['temperatura'], 'max_output_tokens': 4096},
                 safety_settings=safety_settings
             )
         except Exception as e:
