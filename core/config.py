@@ -4,11 +4,18 @@ import os
 
 CONFIG_FILE = 'config.json'
 
+DEFAULT_COMMAND_PREFIX = '!'
+DEFAULT_ADMIN_ROLE_ID = None
+DEFAULT_ALLOWED_CHANNEL_IDS = []
+DEFAULT_BOT_ENABLED_FOR_USERS = True
+DEFAULT_MAX_OUTPUT_TOKENS = 4096
+
 DEFAULT_GUILD_CONFIG = {
-    'command_prefix': '!',
-    'admin_role_id': None,
-    'allowed_channel_ids': [],
-    'bot_enabled_for_users': True,
+    'command_prefix': DEFAULT_COMMAND_PREFIX,
+    'admin_role_id': DEFAULT_ADMIN_ROLE_ID,
+    'allowed_channel_ids': DEFAULT_ALLOWED_CHANNEL_IDS,
+    'bot_enabled_for_users': DEFAULT_BOT_ENABLED_FOR_USERS,
+    'max_output_tokens': DEFAULT_MAX_OUTPUT_TOKENS,
 }
 
 DEFAULT_AI_SETTINGS = {'personality': 'Tono: neutral. Estilo: formal.', 'temperature': 0.5}
@@ -64,32 +71,41 @@ class ConfigManager:
             else:
                 print(f"Advertencia: Configuración inválida encontrada para {guild_id_str}. Reemplazando con defaults.")
             self.bot_config[guild_id_str] = copy.deepcopy(DEFAULT_GUILD_CONFIG)
+            self.save_config()
 
         guild_cfg = self.bot_config[guild_id_str]
 
         config_updated = False
+
         for key, default_value in DEFAULT_GUILD_CONFIG.items():
             if key not in guild_cfg:
                 guild_cfg[key] = copy.deepcopy(default_value)
+                print(f"Añadiendo clave faltante '{key}' a config de {guild_id_str}")
                 config_updated = True
 
         if not isinstance(guild_cfg.get('command_prefix'), str) or not guild_cfg.get('command_prefix'):
-            guild_cfg['command_prefix'] = DEFAULT_GUILD_CONFIG['command_prefix']
+            print(f"Corrigiendo 'command_prefix' inválido para {guild_id_str}")
+            guild_cfg['command_prefix'] = DEFAULT_COMMAND_PREFIX
             config_updated = True
 
-        if not isinstance(guild_cfg.get('admin_role_id'), (int, type(None))):
-            if isinstance(guild_cfg.get('admin_role_id'), str) and guild_cfg.get('admin_role_id').isdigit():
-                 guild_cfg['admin_role_id'] = int(guild_cfg.get('admin_role_id'))
+        admin_role_val = guild_cfg.get('admin_role_id')
+        if not isinstance(admin_role_val, (int, type(None))):
+            if isinstance(admin_role_val, str) and admin_role_val.isdigit():
+                 guild_cfg['admin_role_id'] = int(admin_role_val)
+                 print(f"Convirtiendo 'admin_role_id' de str a int para {guild_id_str}")
+                 config_updated = True
             else:
-                 guild_cfg['admin_role_id'] = DEFAULT_GUILD_CONFIG['admin_role_id']
-            config_updated = True
+                 print(f"Corrigiendo 'admin_role_id' inválido para {guild_id_str}")
+                 guild_cfg['admin_role_id'] = DEFAULT_ADMIN_ROLE_ID
+                 config_updated = True
 
-
-        if not isinstance(guild_cfg.get('allowed_channel_ids'), list):
+        allowed_channels_val = guild_cfg.get('allowed_channel_ids')
+        if not isinstance(allowed_channels_val, list):
+            print(f"Corrigiendo 'allowed_channel_ids' inválido (no es lista) para {guild_id_str}")
             guild_cfg['allowed_channel_ids'] = []
             config_updated = True
         else:
-            original_ids = guild_cfg.get('allowed_channel_ids', [])
+            original_ids = allowed_channels_val
             valid_ids = []
             list_changed = False
             for ch_id in original_ids:
@@ -101,12 +117,25 @@ class ConfigManager:
                 else:
                     list_changed = True
             if list_changed:
+                print(f"Validando/Convirtiendo IDs en 'allowed_channel_ids' para {guild_id_str}")
                 guild_cfg['allowed_channel_ids'] = valid_ids
                 config_updated = True
 
         if not isinstance(guild_cfg.get('bot_enabled_for_users'), bool):
-            guild_cfg['bot_enabled_for_users'] = DEFAULT_GUILD_CONFIG['bot_enabled_for_users']
+            print(f"Corrigiendo 'bot_enabled_for_users' inválido para {guild_id_str}")
+            guild_cfg['bot_enabled_for_users'] = DEFAULT_BOT_ENABLED_FOR_USERS
             config_updated = True
+
+        max_tokens_val = guild_cfg.get('max_output_tokens')
+        if not isinstance(max_tokens_val, int) or max_tokens_val <= 0:
+             if isinstance(max_tokens_val, str) and max_tokens_val.isdigit() and int(max_tokens_val) > 0:
+                 guild_cfg['max_output_tokens'] = int(max_tokens_val)
+                 print(f"Convirtiendo 'max_output_tokens' de str a int para {guild_id_str}")
+                 config_updated = True
+             else:
+                 print(f"Corrigiendo 'max_output_tokens' inválido para {guild_id_str}")
+                 guild_cfg['max_output_tokens'] = DEFAULT_MAX_OUTPUT_TOKENS
+                 config_updated = True
 
         if config_updated:
             print(f"Configuración para servidor {guild_id_str} actualizada/validada.")
@@ -123,5 +152,6 @@ __all__ = [
     "DEFAULT_AI_IS_ACTIVE",
     "MAX_ATTACHMENT_SIZE_BYTES",
     "LANGUAGE_EXTENSIONS",
-    "DEFAULT_FILE_EXTENSION"
+    "DEFAULT_FILE_EXTENSION",
+    "DEFAULT_MAX_OUTPUT_TOKENS"
 ]

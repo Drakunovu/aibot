@@ -67,7 +67,7 @@ async def _check_processing_permissions(message: discord.Message, bot: commands.
         stripped_content = message.content.lstrip(f"<@!{bot.user.id}>").lstrip(f"<@{bot.user.id}>").strip()
         if stripped_content or message.attachments:
             should_process_gemini = True
-    elif channel_context.is_active:
+    elif channel_context.settings.get('natural_conversation', False):
         should_process_gemini = True
         stripped_content = message.content
 
@@ -161,7 +161,7 @@ def _update_and_trim_history(channel_context: ChannelContext, user_message_part:
 
 
 async def _call_gemini_api(channel_context: ChannelContext, message: discord.Message) -> typing.Tuple[genai.types.GenerateContentResponse | None, genai.GenerativeModel | None]:
-    model = channel_context.create_model()
+    model = channel_context.create_model(message.guild.id)
     if model is None:
         await message.channel.send("⚠️ Error crítico: No se pudo configurar el modelo de IA.")
         return None, None
@@ -382,12 +382,19 @@ async def on_message(message: discord.Message):
         await bot.process_commands(message)
         return
 
-    should_process, stripped_content = await _check_processing_permissions(message, bot)
-    if not should_process:
+    is_mention = bot.user.mentioned_in(message)
+    stripped_content = None
+    if is_mention:
+        stripped_content = message.content.lstrip(f"<@!{bot.user.id}>").lstrip(f"<@{bot.user.id}>").strip()
+    else:
+        stripped_content = message.content
+
+    if await _handle_admin_menu_trigger(message, bot, is_mention, stripped_content):
         return
 
-    is_mention = bot.user.mentioned_in(message)
-    if await _handle_admin_menu_trigger(message, bot, is_mention, stripped_content):
+    should_process_ai, ai_content = await _check_processing_permissions(message, bot)
+
+    if not should_process_ai:
         return
 
     channel_id = message.channel.id
@@ -395,7 +402,7 @@ async def on_message(message: discord.Message):
     channel_context.stop_requested = False
 
     try:
-        llm_parts = await _prepare_llm_input_parts(message, stripped_content)
+        llm_parts = await _prepare_llm_input_parts(message, ai_content)
         if not llm_parts:
             return
 
@@ -426,12 +433,12 @@ async def on_message(message: discord.Message):
             await message.channel.send("⚠️ Ocurrió un error inesperado al procesar tu mensaje.")
         except discord.Forbidden:
             pass
-        if channel_context and channel_context.history and channel_context.history[-1]['role'] == 'user':
+        if 'channel_context' in locals() and channel_context and channel_context.history and channel_context.history[-1]['role'] == 'user':
             print("Popping user message from history due to general exception.")
             channel_context.history.pop()
     finally:
-        if channel_context: channel_context.stop_requested = False
-
+        if 'channel_context' in locals() and channel_context:
+            channel_context.stop_requested = False
 
 async def show_menu(channel: discord.TextChannel, author: discord.Member, bot: commands.Bot):
     if not is_admin(author):
@@ -449,7 +456,8 @@ async def show_menu(channel: discord.TextChannel, author: discord.Member, bot: c
     if len(personality_display) > 150: personality_display = personality_display[:147] + "..."
     embed.add_field(name="🇦 Personalidad", value=f"```{personality_display if personality_display else 'Default'}```", inline=False)
     embed.add_field(name="🇧 Temperatura", value=f"`{channel_context.settings['temperature']}`", inline=True)
-    embed.add_field(name="🇨 Conversación Natural", value="✅ Activa" if channel_context.is_active else "☑️ Desactivada", inline=True)
+    natural_conv_state = channel_context.settings.get('natural_conversation', False)
+    embed.add_field(name="🇨 Conversación Natural", value="✅ Activa" if natural_conv_state else "☑️ Desactivada", inline=True)
     embed.add_field(name="🇩 Limpiar Historial", value="Iniciar una conversación como nueva", inline=True)
     embed.add_field(name="🇪 Restablecer configuración", value="Volver a los valores por defecto", inline=True)
     embed.add_field(name="", value="\u200b", inline=False)
@@ -502,7 +510,7 @@ async def show_menu(channel: discord.TextChannel, author: discord.Member, bot: c
         selected_emoji = str(reaction.emoji)
 
         try:
-            if menu_msg and not channel.is_nsfw():
+            if menu_msg:
                  await menu_msg.remove_reaction(selected_emoji, author)
         except (discord.Forbidden, discord.NotFound):
             pass

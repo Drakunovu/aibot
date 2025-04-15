@@ -5,7 +5,12 @@ from dotenv import load_dotenv
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
-from core.config import DEFAULT_AI_SETTINGS, DEFAULT_AI_IS_ACTIVE
+from core.config import (
+    DEFAULT_AI_SETTINGS,
+    DEFAULT_AI_IS_ACTIVE,
+    config_manager,
+    DEFAULT_MAX_OUTPUT_TOKENS
+)
 
 load_dotenv()
 MODEL_NAME = os.getenv('MODEL_NAME')
@@ -44,7 +49,7 @@ class ChannelContext:
         self.is_active = DEFAULT_AI_IS_ACTIVE
         self.stop_requested = False
 
-    def create_model(self) -> typing.Optional[genai.GenerativeModel]:
+    def create_model(self, guild_id: int) -> typing.Optional[genai.GenerativeModel]:
         safety_settings=[
             {"category": HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, "threshold": HarmBlockThreshold.BLOCK_NONE},
             {"category": HarmCategory.HARM_CATEGORY_HATE_SPEECH, "threshold": HarmBlockThreshold.BLOCK_NONE},
@@ -53,8 +58,11 @@ class ChannelContext:
         ]
 
         try:
+            guild_cfg = config_manager.get_guild_config(guild_id)
+            max_tokens = guild_cfg.get('max_output_tokens', DEFAULT_MAX_OUTPUT_TOKENS)
+
             personality_instruction = self.settings.get('personality', '').strip()
-            base_instruction = "Responde en español (latinoamericano venezolano)."
+            base_instruction = "Responde en el idioma que se te hable. Tu nombre en general es Iris."
             mention_instruction = (
                 "Importante: Estás en un chat de Discord con múltiples usuarios. "
                 "Cada mensaje de un usuario en el historial que te proporciono vendrá prefijado con su nombre y su ID único de Discord, en el formato: 'NombreUsuario (ID: 123456789012345678): contenido del mensaje'. "
@@ -71,6 +79,7 @@ class ChannelContext:
                 "UsuarioX (ID: 888): @Bot, ¿qué dijo UsuarioY?"
                 "Tu Respuesta Correcta: '<@888>, <@999> dijo que cree que es buena idea.'"
                 "NUNCA te refieras al usuario que te pide algo usando tu propio nombre ('Bot'). SIEMPRE usa su mención `<@USER_ID>` obtenida del historial."
+                "Si se te pide una pregunta trivial como: @UsuarioY es malo en LoL?. Entonces vas a dar una respuesta o positiva o negativa, ninguna neutral. No siempre será positiva la respuesta por favor."
             )
 
             system_instruction_parts = [base_instruction]
@@ -83,7 +92,7 @@ class ChannelContext:
             return genai.GenerativeModel(
                 MODEL_NAME_USED,
                 system_instruction=system_instruction,
-                generation_config={'temperature': self.settings['temperature'], 'max_output_tokens': 4096},
+                generation_config={'temperature': self.settings['temperature'], 'max_output_tokens': max_tokens},
                 safety_settings=safety_settings
             )
         except Exception as e:

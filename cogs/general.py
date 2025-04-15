@@ -32,8 +32,8 @@ class GeneralCommands(commands.Cog):
 
         embed.add_field(name=f"🔧 Configuración IA por Canal (Admins)", value=f"""
         *(Afectan solo al canal donde se usan)*
-        `{current_prefix}setpersonality <descripción>` / `set_persona` - Define personalidad/tono/estilo.
-        `{current_prefix}settemperature <0.0-1.0>` / `set_temp` - Cambia la creatividad/aleatoriedad.
+        `{current_prefix}setpersonality <descripción>` / `setpersona` - Define personalidad/tono/estilo.
+        `{current_prefix}settemperature <0.0-1.0>` / `settemp` - Cambia la creatividad/aleatoriedad.
         `{current_prefix}togglenatural` / `natural_conv` - Activa/desactiva respuesta sin mención.
         `{current_prefix}resetai` / `reset_ai` - Restablece config. de IA para el canal a por defecto (pide confirmación).
         `{current_prefix}clearhistory` / `clear_history` - Borra historial de la IA para el canal (pide confirmación).
@@ -50,7 +50,8 @@ class GeneralCommands(commands.Cog):
         `{current_prefix}listchannels` - Muestra canales permitidos para usuarios (Admin).
         `{current_prefix}enablebot` - Habilita bot para usuarios (Admin).
         `{current_prefix}disablebot` - Deshabilita bot para usuarios (Admin).
-        `{current_prefix}showconfig` - Muestra config actual del servidor (Admin).
+        `{current_prefix}setmaxoutput <tokens>` - Establece tokens máx. de salida para la IA (Admin).
+        `{current_prefix}showconfig` - Muestra config actual del servidor y canal (Admin).
         """, inline=False)
 
         embed.add_field(name="", value="\u200b", inline=False)

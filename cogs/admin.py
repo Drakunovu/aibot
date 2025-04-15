@@ -1,8 +1,9 @@
 import discord
 from discord.ext import commands
 
-from core.config import config_manager, DEFAULT_GUILD_CONFIG
-from utils import is_admin_check, is_owner_check
+from core.config import config_manager, DEFAULT_GUILD_CONFIG, DEFAULT_MAX_OUTPUT_TOKENS
+from core.contexts import context_manager, DEFAULT_AI_SETTINGS
+from utils import is_admin_check, is_owner_check, perform_set_max_output_tokens
 
 class AdminCommands(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -129,6 +130,13 @@ class AdminCommands(commands.Cog):
         allowed_ids = guild_cfg.get('allowed_channel_ids', [])
         bot_enabled = guild_cfg.get('bot_enabled_for_users', True)
         current_prefix = guild_cfg.get('command_prefix', DEFAULT_GUILD_CONFIG['command_prefix'])
+        max_output_tokens = guild_cfg.get('max_output_tokens', DEFAULT_MAX_OUTPUT_TOKENS)
+
+        channel_context = await context_manager.get_channel_ctx(ctx.channel.id)
+        channel_settings = channel_context.settings
+        personality = channel_settings.get('personality', DEFAULT_AI_SETTINGS['personality'])
+        temperature = channel_settings.get('temperature', DEFAULT_AI_SETTINGS['temperature'])
+        natural_conv = channel_settings.get('natural_conversation', DEFAULT_AI_SETTINGS['natural_conversation'])
 
         admin_role_str = "No establecido"
         if admin_role_id:
@@ -137,13 +145,45 @@ class AdminCommands(commands.Cog):
 
         channels_str = "Todos" if not allowed_ids else f"{len(allowed_ids)} específicos (usa `{current_prefix}listchannels`)"
         enabled_str = "✅ Habilitado" if bot_enabled else "☑️ Deshabilitado (solo admins)"
+        max_output_str = f"`{max_output_tokens}`"
+        if max_output_tokens == DEFAULT_MAX_OUTPUT_TOKENS:
+             max_output_str += " (por defecto)"
 
-        embed = discord.Embed(title=f"Configuración del Bot para {ctx.guild.name}", color=discord.Color.green())
+        personality_display = personality if personality else "Por defecto"
+        if len(personality_display) > 100:
+             personality_display = personality_display[:97] + "..."
+        if personality_display != "Por defecto":
+            personality_display = f"```\n{personality_display}\n```"
+
+        temp_str = f"`{temperature}`"
+        natural_str = "✅ Activada" if natural_conv else "☑️ Desactivada"
+
+        embed = discord.Embed(title=f"📄 Configuración Actual ({ctx.guild.name})", color=discord.Color.green())
+
+        embed.add_field(name="⚙️ Configuración del Servidor", value="\u200b", inline=False)
         embed.add_field(name="Prefijo", value=f"`{current_prefix}`", inline=True)
-        embed.add_field(name="Estado para Usuarios", value=enabled_str, inline=True)
+        embed.add_field(name="Estado (Usuarios)", value=enabled_str, inline=True)
+        embed.add_field(name="Tokens Máx. Salida", value=max_output_str, inline=True)
         embed.add_field(name="Rol Admin", value=admin_role_str, inline=False)
         embed.add_field(name="Canales Permitidos (Usuarios)", value=channels_str, inline=False)
+
+        embed.add_field(name="\u200b", value="\u200b", inline=False)
+
+        embed.add_field(name=f"💬 Configuración Canal Actual ({ctx.channel.mention})", value="\u200b", inline=False)
+        embed.add_field(name="Temperatura IA", value=temp_str, inline=True)
+        embed.add_field(name="Conversación Natural", value=natural_str, inline=True)
+        embed.add_field(name="Personalidad IA", value=personality_display, inline=False)
+        embed.add_field(name="Tamaño Historial", value=f"Usa `{current_prefix}tokencount` para ver detalles.", inline=False)
+
+        embed.set_footer(text=f"Admin = Dueño, rol admin configurado, o permiso 'Administrador'")
         await ctx.send(embed=embed)
+
+
+    @commands.command(name="setmaxoutput")
+    @is_admin_check()
+    @commands.guild_only()
+    async def set_max_output_tokens_command(self, ctx: commands.Context, max_tokens: int):
+        await perform_set_max_output_tokens(ctx, max_tokens)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(AdminCommands(bot))
