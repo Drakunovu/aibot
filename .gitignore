@@ -173,4 +173,6 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-*.json
+config.json
+bot_usage.db
+.vscode

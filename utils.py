@@ -6,36 +6,53 @@ import discord
 from discord.ext import commands
 
 from core.config import config_manager, DEFAULT_GUILD_CONFIG, DEFAULT_AI_SETTINGS, DEFAULT_MAX_OUTPUT_TOKENS
-from core.contexts import ChannelContext, context_manager
+from core.contexts import ChannelContext
+from core.openrouter_models import model_info_manager
 
-# --- Constants for Token Limits ---
 MIN_ALLOWED_OUTPUT_TOKENS = 64
 MAX_ALLOWED_OUTPUT_TOKENS = 8192
 
-# --- New Helper Function ---
 def parse_model_id_from_input(input_str: str) -> str:
-    """
-    Parses a model ID from user input, which can be a full OpenRouter URL
-    or just the model ID string.
-    """
-    base_url = "https://openrouter.ai/"
-    # Also handle models/ path for convenience
     base_url_models = "https://openrouter.ai/models/"
+    input_str = input_str.strip().strip('<>')
     
-    input_str = input_str.strip()
-
     if input_str.startswith(base_url_models):
         return input_str[len(base_url_models):]
-    elif input_str.startswith(base_url):
-        return input_str[len(base_url):]
     
-    # Assume the input is already a model ID
     return input_str
 
-# --- Permission Checks ---
+async def set_and_verify_model(ctx: commands.Context, model_id: str) -> tuple[bool, typing.Union[discord.Embed, str]]:
+    msg = await ctx.send(f"🔍 *Verificando compatibilidad para el modelo `{model_id}`...*")
+    
+    details = await model_info_manager.get_model_details(model_id)
+
+    if not details:
+        await msg.edit(content=f"❌ **Modelo no encontrado.** No pude encontrar un modelo con el ID `{model_id}`.")
+        return False, msg
+
+    pricing = details.get('pricing', {})
+    is_free = float(pricing.get('prompt', 1)) == 0 and float(pricing.get('completion', 1)) == 0
+    if not is_free:
+        await msg.edit(content=f"❌ **Modelo no gratuito.** El modelo `{model_id}` tiene un costo y no puede ser seleccionado.")
+        return False, msg
+        
+    personality_supported = await model_info_manager.test_system_prompt_support(model_id)
+
+    embed = discord.Embed(title="✅ Modelo Actualizado", color=discord.Color.green())
+    if description := details.get('description'):
+        embed.add_field(name="Descripción", value=description, inline=False)
+    
+    embed.add_field(name="Contexto Máximo", value=f"`{details.get('context_length', 'N/A')} tokens`", inline=True)
+    
+    if personality_supported:
+        embed.add_field(name="Soporte de Personalidad", value="✅ Soportado", inline=True)
+    else:
+        embed.add_field(name="Soporte de Personalidad", value="⚠️ No Soportado", inline=True)
+        embed.set_footer(text="Nota: La personalidad será ignorada para este modelo.")
+    
+    return True, (msg, embed)
 
 def is_admin(member: typing.Union[discord.Member, discord.User]) -> bool:
-    """Checks if a guild member has administrative privileges."""
     if not isinstance(member, discord.Member):
         return False
     if member.guild.owner_id == member.id:
@@ -50,7 +67,6 @@ def is_admin(member: typing.Union[discord.Member, discord.User]) -> bool:
     return False
 
 def is_admin_check():
-    """A command check that verifies the user is an admin."""
     async def predicate(ctx: commands.Context) -> bool:
         if not ctx.guild:
             raise commands.NoPrivateMessage("Este comando solo funciona en servidores.")
@@ -60,7 +76,6 @@ def is_admin_check():
     return commands.check(predicate)
 
 def is_owner_check():
-    """A command check that verifies the user is the guild owner."""
     async def predicate(ctx: commands.Context) -> bool:
         if not ctx.guild:
             raise commands.NoPrivateMessage("Este comando solo funciona en servidores.")
@@ -69,23 +84,18 @@ def is_owner_check():
         return True
     return commands.check(predicate)
 
-# --- Bot Logic Helpers ---
-
 async def get_prefix(bot: commands.Bot, message: discord.Message) -> str:
-    """Dynamically retrieves the command prefix for the guild."""
     if not message.guild:
         return DEFAULT_GUILD_CONFIG['command_prefix']
     guild_cfg = config_manager.get_guild_config(message.guild.id)
     return guild_cfg.get('command_prefix', DEFAULT_GUILD_CONFIG['command_prefix'])
 
 def is_channel_allowed(guild_id: int, channel_id: int) -> bool:
-    """Checks if the bot is allowed to operate in a specific channel for non-admins."""
     guild_cfg = config_manager.get_guild_config(guild_id)
     allowed_ids = guild_cfg.get('allowed_channel_ids', [])
     return not allowed_ids or channel_id in allowed_ids
 
 async def request_confirmation(ctx: commands.Context, action_description: str) -> bool:
-    """Sends a confirmation message and waits for the user's reaction."""
     confirm_msg = await ctx.send(
         f"**Confirmación Requerida**: ¿Seguro que deseas **{action_description}**?\n"
         "Reacciona con ✅ para confirmar o ❌ para cancelar (tienes 30 segundos)."
@@ -110,10 +120,7 @@ async def request_confirmation(ctx: commands.Context, action_description: str) -
         
     return confirmed
 
-# --- AI Channel Settings ---
-
-def reset_channel_ai_settings(channel_context: ChannelContext):
-    """Resets a channel's AI settings to their default values."""
+def reset_channel_settings(channel_context: ChannelContext):
     channel_context.settings = copy.deepcopy(DEFAULT_AI_SETTINGS)
     if 'model' in channel_context.settings:
         del channel_context.settings['model']
@@ -121,7 +128,6 @@ def reset_channel_ai_settings(channel_context: ChannelContext):
     print(f"Configuración de IA del canal {channel_context.channel_id} restablecida.")
 
 async def perform_set_max_output_tokens(ctx: commands.Context, max_tokens: int) -> bool:
-    """Sets the max output tokens for the guild and saves the config."""
     if not (MIN_ALLOWED_OUTPUT_TOKENS <= max_tokens <= MAX_ALLOWED_OUTPUT_TOKENS):
         await ctx.send(
             f"❌ El número de tokens debe estar entre **{MIN_ALLOWED_OUTPUT_TOKENS}** y **{MAX_ALLOWED_OUTPUT_TOKENS}**. "

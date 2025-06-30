@@ -1,29 +1,28 @@
-import discord
-import re
 import datetime
+import re
+
+import discord
 from discord.ext import commands
-from discord.ui import View, Button
+from discord.ui import Button, View
+
 from core.config import config_manager
 from core.contexts import context_manager
 from core.openrouter_models import model_info_manager
 
 MODELS_PER_PAGE = 5
 
-# --- Sorting Logic ---
 SORT_KEYS = {
     'newest': {'key': 'created', 'reverse': True},
     'context': {'key': 'context_length', 'reverse': True},
 }
 SORT_KEY_NAMES = list(SORT_KEYS.keys())
 
-# --- Spanish Date Formatting ---
 SPANISH_MONTHS = {
     1: "Ene", 2: "Feb", 3: "Mar", 4: "Abr", 5: "May", 6: "Jun",
     7: "Jul", 8: "Ago", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dic"
 }
 
 class ModelsPaginator(View):
-    """A view to handle pagination for the !models command."""
     def __init__(self, models: list, prefix: str, search_query: str = None, sort_key: str = None):
         super().__init__(timeout=300)
         self.models = models
@@ -34,13 +33,12 @@ class ModelsPaginator(View):
         self.total_pages = (len(self.models) - 1) // MODELS_PER_PAGE
 
     async def create_embed(self) -> discord.Embed:
-        """Creates the embed for the current page."""
         title = "🤖 Modelos Gratuitos Disponibles"
         if self.search_query:
             title += f" (Búsqueda: '{self.search_query}')"
 
         description = "Usa los comandos `!setservermodel` o `!setmodel` para seleccionar uno."
-        sort_display = self.sort_key or "newest" # Show default sort if none is chosen
+        sort_display = self.sort_key or "newest"
         description += f"\n*Ordenado por: {sort_display.capitalize()}*"
 
         embed = discord.Embed(title=title, description=description, color=discord.Color.blue())
@@ -59,7 +57,6 @@ class ModelsPaginator(View):
             if created_timestamp and isinstance(created_timestamp, (int, float)):
                 try:
                     dt_object = datetime.datetime.fromtimestamp(created_timestamp)
-                    # Format date in Spanish using the dictionary
                     month_es = SPANISH_MONTHS.get(dt_object.month, '?')
                     date_str = f"{dt_object.day} {month_es}, {dt_object.year}"
                 except (ValueError, TypeError):
@@ -79,7 +76,6 @@ class ModelsPaginator(View):
         return embed
 
     def update_buttons(self):
-        """Enables or disables buttons based on the current page."""
         self.children[0].disabled = self.current_page == 0
         self.children[1].disabled = self.current_page >= self.total_pages
 
@@ -100,14 +96,12 @@ class ModelsPaginator(View):
             await interaction.response.edit_message(embed=embed, view=self)
 
 class GeneralCommands(commands.Cog):
-    """General purpose commands, like the help command."""
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     @commands.command(name='help')
     @commands.guild_only()
     async def help_command(self, ctx: commands.Context):
-        """Displays a comprehensive help message for the bot."""
         prefix = ctx.prefix
         embed = discord.Embed(title=f"🤖 Ayuda del Bot", color=discord.Color.purple())
         embed.set_author(name=self.bot.user.display_name, icon_url=self.bot.user.avatar.url)
@@ -147,22 +141,19 @@ class GeneralCommands(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.command(name='showconfig')
-    @commands.guild_only() # Kept guild_only as config is guild-specific
+    @commands.guild_only()
     async def show_config_command(self, ctx: commands.Context):
-        """Displays the current server and channel configuration."""
         msg = await ctx.send("🔍 *Verificando configuración y compatibilidad del modelo...*")
 
         guild_cfg = config_manager.get_guild_config(ctx.guild.id)
         channel_context = await context_manager.get_channel_ctx(ctx.channel.id)
         
-        # Server settings
         prefix = guild_cfg.get('command_prefix')
         server_model = guild_cfg.get('model')
         admin_role_id = guild_cfg.get('admin_role_id')
         admin_role = ctx.guild.get_role(admin_role_id) if admin_role_id else "No establecido"
         admin_role_str = admin_role.mention if isinstance(admin_role, discord.Role) else admin_role
 
-        # Channel settings
         ch_settings = channel_context.settings
         ch_model_override = ch_settings.get('model')
         ch_temp = ch_settings.get('temperature')
@@ -204,10 +195,8 @@ class GeneralCommands(commands.Cog):
     @commands.command(name='models')
     @commands.guild_only()
     async def list_models_command(self, ctx: commands.Context, *, args: str = ""):
-        """Lists available free models with optional search and sorting."""
         msg = await ctx.send("🔍 *Buscando modelos gratuitos en OpenRouter...*")
 
-        # Argument Parsing
         raw_args = args.split()
         search_query = ""
         sort_key_arg = None
@@ -216,7 +205,6 @@ class GeneralCommands(commands.Cog):
                 sort_key_arg = raw_args.pop().lower()
             search_query = " ".join(raw_args).strip()
 
-        # Model Fetching and Filtering
         all_models_dict = await model_info_manager.get_all_models()
         if not all_models_dict:
             await msg.edit(content="❌ No se pudo obtener la lista de modelos de la API de OpenRouter.")
@@ -231,19 +219,16 @@ class GeneralCommands(commands.Cog):
             await msg.edit(content="ℹ️ No se encontraron modelos gratuitos en este momento.")
             return
 
-        # Apply Search Query
         if search_query:
             free_models = [
                 m for m in free_models 
                 if search_query.lower() in m.get('name', '').lower() or search_query.lower() in m.get('id', '').lower()
             ]
 
-        # Apply Sorting
         if sort_key_arg:
             sort_info = SORT_KEYS[sort_key_arg]
             free_models.sort(key=lambda m: m.get(sort_info['key'], 0), reverse=sort_info['reverse'])
         else:
-            # Default sort: by newest
             free_models.sort(key=lambda m: m.get('created', 0), reverse=True)
 
         if not free_models:
