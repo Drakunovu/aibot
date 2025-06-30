@@ -74,7 +74,7 @@ async def update_presence():
     try:
         tokens = database_manager.get_tokens_from_last_7_days()
         
-        custom_state = f"Tokens usados en los últimos 7 días: {tokens:,}"
+        custom_state = f"Tokens usados (7d): {tokens:,}"
         activity = discord.Activity(
             type=discord.ActivityType.custom,
             name="Token Usage",

@@ -96,7 +96,7 @@ class AIResponseHandler:
                 prompt_tokens = usage.prompt_tokens
                 completion_tokens = usage.completion_tokens
                 total_tokens = usage.total_tokens
-                return f"\n*Prompt Tokens: `{prompt_tokens}` | Completion Tokens: `{completion_tokens}` | Total Tokens: `{total_tokens}`*"
+                return f"\n\n*Prompt Tokens: `{prompt_tokens}` | Completion Tokens: `{completion_tokens}` | Total Tokens: `{total_tokens}`*"
         except (AttributeError, TypeError):
             pass
         return ""
